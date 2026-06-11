@@ -1,0 +1,491 @@
+-- ============================================================
+--  UNScript UI  |  Executor: Velocity
+-- ============================================================
+
+-- ─── Services ───────────────────────────────────────────────
+local Players          = game:GetService("Players")
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+local HttpService      = game:GetService("HttpService")
+local GuiService       = game:GetService("GuiService")
+
+-- ─── UI Parent ──────────────────────────────────────────────
+local uiParent
+do
+    local ok = pcall(function() game:GetService("CoreGui"):IsA("DataModel") end)
+    uiParent = ok and game:GetService("CoreGui") or Players.LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- ─── Shortcuts ───────────────────────────────────────────────
+local rgb  = Color3.fromRGB
+local ud2  = UDim2.new
+local ud   = UDim.new
+local bold = Enum.Font.GothamBold
+local reg  = Enum.Font.Gotham
+
+-- ─── Helper: Make ────────────────────────────────────────────
+local function Make(className, props)
+    local inst = Instance.new(className)
+    for k, v in pairs(props) do inst[k] = v end
+    return inst
+end
+
+-- ============================================================
+--  FILE-WCH  ▸  Config Save / Load
+-- ============================================================
+local ConfigFolder    = "UNScript/Configurations"
+local ConfigExtension = ".cfg"
+
+local function safeCall(func, ...)
+    if func then
+        local ok, result = pcall(func, ...)
+        if not ok then warn("[UNScript Config]", result) return false end
+        return result
+    end
+    return false
+end
+
+local function ensureFolder(path)
+    if isfolder and not safeCall(isfolder, path) then
+        safeCall(makefolder, path)
+    end
+end
+
+local function saveConfig(name, data)
+    ensureFolder(ConfigFolder)
+    local encoded = HttpService:JSONEncode(data)
+    safeCall(writefile, ConfigFolder .. "/" .. name .. ConfigExtension, encoded)
+end
+
+local function loadConfig(name)
+    local path = ConfigFolder .. "/" .. name .. ConfigExtension
+    if not safeCall(isfile, path) then return nil end
+    local content = safeCall(readfile, path)
+    if content then
+        local ok, decoded = pcall(function() return HttpService:JSONDecode(content) end)
+        if ok then return decoded end
+    end
+    return nil
+end
+
+local Settings = loadConfig("settings") or {}
+
+-- ============================================================
+--  GUI CONSTRUCTION
+-- ============================================================
+
+local existingGui = uiParent:FindFirstChild("UNScriptInterface")
+if existingGui then existingGui:Destroy() end
+
+local Gui = Make("ScreenGui", {
+    Name           = "UNScriptInterface",
+    ResetOnSpawn   = false,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    Parent         = uiParent
+})
+
+-- ── Main Window ─────────────────────────────────────────────
+local Main = Make("Frame", {
+    Size                   = ud2(0,360,0,480),
+    Position               = ud2(0.5,-180,0.5,-240),
+    BackgroundColor3       = rgb(25,25,25),
+    BackgroundTransparency = 0.25,
+    BorderSizePixel        = 0,
+    Active                 = true,
+    ClipsDescendants       = true,
+    Parent                 = Gui
+})
+Make("UICorner", {CornerRadius = ud(0,20), Parent = Main})
+
+-- ── Traffic-light dots (parented directly to Main, no top bar) ──
+local function makeDot(xPos, color)
+    local dot = Make("TextButton", {
+        Size             = ud2(0,16,0,16),
+        Position         = ud2(0,xPos,0,13),
+        Text             = "",
+        BackgroundColor3 = color,
+        BorderSizePixel  = 0,
+        Parent           = Main
+    })
+    Make("UICorner", {CornerRadius = ud(1,0), Parent = dot})
+    return dot
+end
+local CloseBtn = makeDot(14, rgb(255,95,86))
+local MinBtn   = makeDot(36, rgb(255,189,46))
+local MaxBtn   = makeDot(58, rgb(39,201,63))
+
+-- ── Settings gear (top-right) ────────────────────────────────
+local ToggleBtn = Make("TextButton", {
+    Size               = ud2(0,28,0,28),
+    Position           = ud2(1,-38,0,8),
+    BackgroundTransparency = 1,
+    Text               = "⚙",
+    TextColor3         = rgb(150,150,150),
+    TextSize           = 20,
+    Font               = bold,
+    Parent             = Main
+})
+
+-- ── Search icon (top-right, left of gear) ────────────────────
+local SearchBtn = Make("TextButton", {
+    Size               = ud2(0,28,0,28),
+    Position           = ud2(1,-72,0,8),
+    BackgroundTransparency = 1,
+    Text               = "🔍",
+    TextColor3         = rgb(150,150,150),
+    TextSize           = 16,
+    Font               = bold,
+    Parent             = Main
+})
+
+-- FIX: Title placed in Main itself, horizontally aligned with dots/icons
+local TitleLabel = Make("TextLabel", {
+    Size               = ud2(0,80,0,16),
+    Position           = ud2(0.5,-40,0,13),       -- same Y as dots (13), centered
+    BackgroundTransparency = 1,
+    Text               = "UNScript",
+    TextColor3         = rgb(180,180,180),
+    TextSize           = 13,
+    Font               = bold,
+    TextXAlignment     = Enum.TextXAlignment.Center,
+    TextYAlignment     = Enum.TextYAlignment.Center,
+    Parent             = Main
+})
+
+-- FIX: Search bar also in Main, slides down into header row
+local SearchBarHolder = Make("Frame", {
+    Size               = ud2(0,180,0,24),
+    Position           = ud2(0.5,-90,0,-30),       -- starts above, centered
+    BackgroundColor3   = rgb(40,40,40),
+    BackgroundTransparency = 0.2,
+    BorderSizePixel    = 0,
+    ClipsDescendants   = true,
+    Parent             = Main
+})
+Make("UICorner", {CornerRadius = ud(0,6), Parent = SearchBarHolder})
+
+Make("TextLabel", {
+    Size               = ud2(0,22,1,0),
+    BackgroundTransparency = 1,
+    Text               = "🔍",
+    TextSize           = 11,
+    Font               = bold,
+    TextColor3         = rgb(120,120,120),
+    Parent             = SearchBarHolder
+})
+local SearchInput = Make("TextBox", {
+    Size               = ud2(1,-28,1,0),
+    Position           = ud2(0,24,0,0),
+    BackgroundTransparency = 1,
+    PlaceholderText    = "Search...",
+    PlaceholderColor3  = rgb(100,100,100),
+    Text               = "",
+    TextColor3         = rgb(220,220,220),
+    TextSize           = 12,
+    Font               = reg,
+    ClearTextOnFocus   = false,
+    Parent             = SearchBarHolder
+})
+
+-- ── Pill (minimised) ─────────────────────────────────────────
+local PillUI = Make("TextButton", {
+    Size                   = ud2(0,120,0,36),
+    Position               = ud2(0.5,-60,0,12),
+    BackgroundColor3       = rgb(25,25,25),
+    BackgroundTransparency = 0.25,
+    Text                   = "UNScript",
+    TextColor3             = rgb(220,220,255),
+    Font                   = bold,
+    TextSize               = 13,
+    Active                 = true,
+    Visible                = false,
+    Parent                 = Gui
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = PillUI})
+
+-- ── Pages ────────────────────────────────────────────────────
+local MainPage = Make("Frame", {
+    Size               = ud2(1,0,1,-42),
+    Position           = ud2(0,0,0,42),
+    BackgroundTransparency = 1,
+    ClipsDescendants   = true,
+    Parent             = Main
+})
+local SetPage = Make("Frame", {
+    Size               = ud2(1,0,1,-42),
+    Position           = ud2(0,0,0,42),
+    BackgroundTransparency = 1,
+    ClipsDescendants   = true,
+    Visible            = false,
+    Parent             = Main
+})
+
+-- ============================================================
+--  SCRIPTS PAGE
+-- ============================================================
+
+-- Scroll list for scripts (no title here anymore)
+local ScrollList = Make("ScrollingFrame", {
+    Size               = ud2(1,-24,1,-16),
+    Position           = ud2(0,12,0,4),
+    BackgroundTransparency = 1,
+    BorderSizePixel    = 0,
+    ScrollBarThickness = 3,
+    ScrollBarImageColor3 = rgb(80,80,80),
+    CanvasSize         = ud2(0,0,0,0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    Parent             = MainPage
+})
+Make("UIListLayout", {
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding   = ud(0,6),
+    Parent    = ScrollList
+})
+
+-- FILE-LUH ▸ Search wiring
+SearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+    local q = string.lower(SearchInput.Text)
+    for _, el in ipairs(ScrollList:GetChildren()) do
+        if el:IsA("Frame") then
+            el.Visible = (q == "" or string.find(string.lower(el.Name), q, 1, true) ~= nil)
+        end
+    end
+end)
+
+-- ── Search bar toggle animation ──────────────────────────────
+local searchOpen   = false
+local searchTween  = TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+SearchBtn.MouseButton1Click:Connect(function()
+    searchOpen = not searchOpen
+    if searchOpen then
+        -- Fade out title so it doesn't overlap
+        TweenService:Create(TitleLabel, searchTween, {
+            TextTransparency = 1
+        }):Play()
+
+        -- Slide down into header row (Y=13, same as title/dots)
+        TweenService:Create(SearchBarHolder, searchTween, {
+            Position = ud2(0.5,-90,0,13)
+        }):Play()
+        -- Push scroll list down slightly
+        TweenService:Create(ScrollList, searchTween, {
+            Position = ud2(0,12,0,8),
+            Size     = ud2(1,-24,1,-20)
+        }):Play()
+        task.delay(0.1, function()
+            if SearchInput and SearchInput.Parent then
+                SearchInput:CaptureFocus()
+            end
+        end)
+    else
+        -- Fade title back in
+        TweenService:Create(TitleLabel, searchTween, {
+            TextTransparency = 0
+        }):Play()
+
+        -- Slide back up above header
+        TweenService:Create(SearchBarHolder, searchTween, {
+            Position = ud2(0.5,-90,0,-30)
+        }):Play()
+        -- Restore scroll list
+        TweenService:Create(ScrollList, searchTween, {
+            Position = ud2(0,12,0,4),
+            Size     = ud2(1,-24,1,-16)
+        }):Play()
+        SearchInput.Text = ""
+    end
+end)
+
+-- ============================================================
+--  SETTINGS PAGE
+-- ============================================================
+
+-- Title – centred (settings keeps big centered title)
+Make("TextLabel", {
+    Size               = ud2(1,0,0,40),
+    Position           = ud2(0,0,0,18),
+    BackgroundTransparency = 1,
+    Text               = "Settings",
+    TextColor3         = rgb(255,255,255),
+    TextSize           = 26,
+    Font               = bold,
+    TextXAlignment     = Enum.TextXAlignment.Center,
+    Parent             = SetPage
+})
+
+-- Empty settings scroll (ready for future rows)
+local SetScroll = Make("ScrollingFrame", {
+    Size               = ud2(1,-24,1,-72),
+    Position           = ud2(0,12,0,68),
+    BackgroundTransparency = 1,
+    BorderSizePixel    = 0,
+    ScrollBarThickness = 3,
+    ScrollBarImageColor3 = rgb(80,80,80),
+    CanvasSize         = ud2(0,0,0,0),
+    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    Parent             = SetPage
+})
+Make("UIListLayout", {
+    SortOrder = Enum.SortOrder.LayoutOrder,
+    Padding   = ud(0,6),
+    Parent    = SetScroll
+})
+
+-- ============================================================
+--  FILE-XUS ▸ Draggable
+-- ============================================================
+local function makeDraggable(object, handle)
+    local dragging    = false
+    local relative    = Vector2.zero
+    local insetOffset = Vector2.zero
+
+    local sg = object:FindFirstAncestorWhichIsA("ScreenGui")
+    if sg and sg.IgnoreGuiInset then
+        local ok, inset = pcall(function() return GuiService:GetGuiInset() end)
+        if ok then insetOffset = insetOffset + inset end
+    end
+
+    handle.InputBegan:Connect(function(input, processed)
+        if processed then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            relative = Vector2.new(object.AbsolutePosition.X, object.AbsolutePosition.Y)
+                + Vector2.new(object.AbsoluteSize.X  * object.AnchorPoint.X,
+                              object.AbsoluteSize.Y  * object.AnchorPoint.Y)
+                - UserInputService:GetMouseLocation()
+        end
+    end)
+
+    local endConn = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+        or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    local rsConn = RunService.RenderStepped:Connect(function()
+        if dragging then
+            local pos = UserInputService:GetMouseLocation() + relative + insetOffset
+            object.Position = UDim2.fromOffset(pos.X, pos.Y)
+        end
+    end)
+
+    object.Destroying:Connect(function()
+        endConn:Disconnect()
+        rsConn:Disconnect()
+    end)
+end
+
+makeDraggable(Main,   Main)
+makeDraggable(PillUI, PillUI)
+
+-- ============================================================
+--  WINDOW LOGIC
+-- ============================================================
+local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+-- Close
+CloseBtn.MouseButton1Click:Connect(function()
+    TweenService:Create(Main, tweenInfo, {Size = ud2(0,0,0,0)}):Play()
+    task.delay(0.32, function() Gui:Destroy() end)
+end)
+
+-- Minimise → pill
+local pillUsed = false
+local lastMainPos = Main.Position
+
+local function shrinkToPill()
+    lastMainPos = Main.Position
+
+    PillUI.Size = ud2(0, 0, 0, 36)
+
+    if not pillUsed then
+        PillUI.Position = ud2(0.5, -60, 0, 12)
+        pillUsed = true
+    end
+
+    PillUI.Visible = true
+
+    TweenService:Create(PillUI, tweenInfo, {Size = ud2(0, 120, 0, 36)}):Play()
+    TweenService:Create(Main, tweenInfo, {
+        Size     = ud2(0, 0, 0, 0),
+        Position = UDim2.fromOffset(
+            PillUI.AbsolutePosition.X + PillUI.AbsoluteSize.X / 2,
+            PillUI.AbsolutePosition.Y + PillUI.AbsoluteSize.Y / 2
+        )
+    }):Play()
+
+    task.delay(0.32, function()
+        if Main and Main.Parent then
+            Main.Visible = false
+            local rW = isExpanded and LARGE_W or NORMAL_W
+            local rH = isExpanded and LARGE_H or NORMAL_H
+            Main.Size = ud2(0, rW, 0, rH)
+        end
+    end)
+end
+
+-- Green button: toggle between normal (360×480) and 1.5× (540×720)
+local isExpanded = false
+local NORMAL_W, NORMAL_H = 360, 480
+local LARGE_W,  LARGE_H  = 540, 720
+
+MaxBtn.MouseButton1Click:Connect(function()
+    isExpanded = not isExpanded
+    local targetW = isExpanded and LARGE_W or NORMAL_W
+    local targetH = isExpanded and LARGE_H or NORMAL_H
+    TweenService:Create(Main, tweenInfo, {Size = ud2(0, targetW, 0, targetH)}):Play()
+end)
+
+MinBtn.MouseButton1Click:Connect(function() shrinkToPill() end)
+
+-- Restore from pill
+local pillDragStart = nil
+PillUI.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        pillDragStart = input.Position
+    end
+end)
+PillUI.InputEnded:Connect(function(input)
+    if (input.UserInputType == Enum.UserInputType.MouseButton1
+    or  input.UserInputType == Enum.UserInputType.Touch) and pillDragStart then
+        if (input.Position - pillDragStart).Magnitude < 6 then
+            local rW = isExpanded and LARGE_W or NORMAL_W
+            local rH = isExpanded and LARGE_H or NORMAL_H
+
+            Main.Position = lastMainPos
+            Main.Size     = ud2(0, rW, 0, rH)
+            Main.Visible = true
+            TweenService:Create(Main, tweenInfo, {Size = ud2(0, rW, 0, rH)}):Play()
+            PillUI.Visible = false
+        end
+        pillDragStart = nil
+    end
+end)
+
+-- Settings / Scripts toggle
+ToggleBtn.MouseButton1Click:Connect(function()
+    local inSettings = not SetPage.Visible
+    ToggleBtn.Text   = inSettings and "📄" or "⚙"
+    MainPage.Visible = not inSettings
+    SetPage.Visible  = inSettings
+    -- Reset search state when switching pages
+    if searchOpen then
+        searchOpen = false
+        SearchBarHolder.Position = ud2(0.5,-90,0,-30)
+        ScrollList.Position      = ud2(0,12,0,4)
+        ScrollList.Size          = ud2(1,-24,1,-16)
+        SearchInput.Text         = ""
+
+        -- Make sure title is visible again when leaving main page
+        TitleLabel.TextTransparency = 0
+    end
+end)
+
+-- ============================================================
+--  Done  ✓
+-- ============================================================
