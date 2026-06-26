@@ -1372,7 +1372,7 @@ name = "UN",
 scripts = {
 {name = "UNScripts fling", url = "https://raw.githubusercontent.com/mike9993/UNscript-fling-/refs/heads/main/FlingScript.1.lua", wrapLoad = false},
 {name = "UNTapFling", url = "https://raw.githubusercontent.com/mike9993/TapFling/refs/heads/main/FlingScriptUN.3.txt", wrapLoad = false},
-{name = "Advanced Walk Speed v7", url = "https://raw.githubusercontent.com/mike9993/Advance-walk-speed./refs/heads/main/AdvancedWalkSpeed%20v7.lua", wrapLoad = true},
+{name = "Advanced Walk Speed", url = "https://raw.githubusercontent.com/mike9993/Advance-walk-speed./refs/heads/main/AdvancedWalkSpeed%20v7.lua", wrapLoad = true},
 }
 },
 }
